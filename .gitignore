@@ -1,0 +1,13 @@
+# Python virtual environment
+BlogEnv/
+blog-backend/BlogEnv/
+__pycache__/
+*.pyc
+
+# Node dependencies
+node_modules/
+dist/
+
+# Local configuration files
+.env
+.DS_Store
