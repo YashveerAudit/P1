@@ -1,6 +1,5 @@
 # Python virtual environment
 BlogEnv/
-blog-backend/BlogEnv/
 __pycache__/
 *.pyc
 

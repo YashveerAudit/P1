@@ -8,6 +8,8 @@ from pydantic import GetCoreSchemaHandler
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 
+from config import settings
+
 app = FastAPI(title="Blog Post Manager API")
 
 # --- Security: Enable CORS so React can connect ---
@@ -20,10 +22,9 @@ app.add_middleware(
 )
 
 # --- Database Setup (MongoDB) ---
-# Replace with your local connection string if not using Docker/Environment variables
-MONGO_URI = "mongodb+srv://yashveeraudit45_db_user:qKQQ5wkoyxgOVd7B@cluster0.mj5cdix.mongodb.net/"
-client = AsyncIOMotorClient(MONGO_URI)
-db = client.blog_database
+# Connection details come from environment variables / .env (see config.py)
+client = AsyncIOMotorClient(settings.mongo_uri)
+db = client[settings.mongo_db_name]
 posts_collection = db.posts
 
 # --- Helper for MongoDB ObjectId conversion ---
