@@ -3,12 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { deletePost, getPost } from '../api/posts';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { EmptyState, ErrorMessage, Loading } from '../components/Status';
+import { useAuth } from '../context/auth-context';
 import { useApi } from '../hooks/useApi';
 import { formatDate } from '../utils/format';
 
 export default function PostDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: post, error, loading, reload } = useApi((signal) => getPost(id, signal), [id]);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -44,6 +46,8 @@ export default function PostDetail() {
   if (error) return <ErrorMessage message={error.message} onRetry={reload} />;
 
   const wasEdited = post.updated_at !== post.created_at;
+  // Only the author sees Edit/Delete. The server enforces this too.
+  const isOwner = Boolean(user) && user.id === post.owner_id;
 
   return (
     <article className="card post-detail">
@@ -62,14 +66,16 @@ export default function PostDetail() {
       {/* Rendered as text, never as HTML, so user content cannot inject scripts. */}
       <div className="post-detail__content">{post.content}</div>
 
-      <div className="actions">
-        <Link to={`/posts/${post.id}/edit`} className="btn btn--primary">
-          Edit
-        </Link>
-        <button type="button" className="btn btn--danger" onClick={() => setConfirmOpen(true)}>
-          Delete
-        </button>
-      </div>
+      {isOwner && (
+        <div className="actions">
+          <Link to={`/posts/${post.id}/edit`} className="btn btn--primary">
+            Edit
+          </Link>
+          <button type="button" className="btn btn--danger" onClick={() => setConfirmOpen(true)}>
+            Delete
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmOpen}

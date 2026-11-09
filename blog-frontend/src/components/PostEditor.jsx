@@ -1,14 +1,17 @@
 import { useState } from 'react';
+import { useAuth } from '../context/auth-context';
 import { POST_RULES, validatePost } from '../utils/validation';
 import { ErrorMessage } from './Status';
 
-const EMPTY_POST = { title: '', content: '', author: '' };
+const EMPTY_POST = { title: '', content: '' };
 
 /**
  * Controlled form used for both creating and editing a post.
  * Validates on blur and on submit; shows server-side validation errors too.
+ * The author is always the signed-in user, so there is no author field.
  */
 export default function PostEditor({ initialValues = EMPTY_POST, submitLabel, onSubmit, onCancel }) {
+  const { user } = useAuth();
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
@@ -37,11 +40,7 @@ export default function PostEditor({ initialValues = EMPTY_POST, submitLabel, on
 
     setSubmitting(true);
     try {
-      await onSubmit({
-        title: values.title.trim(),
-        content: values.content.trim(),
-        author: values.author.trim(),
-      });
+      await onSubmit({ title: values.title.trim(), content: values.content.trim() });
     } catch (err) {
       if (err.status === 422 && err.details.length > 0) {
         setErrors(err.fieldErrors());
@@ -66,11 +65,7 @@ export default function PostEditor({ initialValues = EMPTY_POST, submitLabel, on
 
   const hint = (name) => (
     <div id={`${name}-hint`} className="field__hint">
-      {errors[name] ? (
-        <span className="field__error">{errors[name]}</span>
-      ) : (
-        <span />
-      )}
+      {errors[name] ? <span className="field__error">{errors[name]}</span> : <span />}
       <span className="meta">
         {values[name].trim().length}/{POST_RULES[name].max}
       </span>
@@ -88,16 +83,12 @@ export default function PostEditor({ initialValues = EMPTY_POST, submitLabel, on
       </div>
 
       <div className="field">
-        <label htmlFor="author">Author</label>
-        <input type="text" placeholder="Your name" {...fieldProps('author')} />
-        {hint('author')}
-      </div>
-
-      <div className="field">
         <label htmlFor="content">Content</label>
         <textarea rows={12} placeholder="Write your post…" {...fieldProps('content')} />
         {hint('content')}
       </div>
+
+      <p className="meta">Publishing as <strong>{user?.name}</strong></p>
 
       <div className="actions">
         <button type="submit" className="btn btn--primary" disabled={submitting}>

@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createPost, getPost, updatePost } from '../api/posts';
 import PostEditor from '../components/PostEditor';
 import { EmptyState, ErrorMessage, Loading } from '../components/Status';
+import { useAuth } from '../context/auth-context';
 import { useApi } from '../hooks/useApi';
 
 /** Handles both /posts/new (create) and /posts/:id/edit (edit). */
@@ -28,6 +29,7 @@ function CreatePost() {
 
 function EditPost({ id }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: post, error, loading, reload } = useApi((signal) => getPost(id, signal), [id]);
 
   async function handleUpdate(values) {
@@ -49,12 +51,23 @@ function EditPost({ id }) {
 
   if (error) return <ErrorMessage message={error.message} onRetry={reload} />;
 
+  if (post.owner_id !== user.id) {
+    return (
+      <EmptyState title="This isn't your post">
+        <p>You can only edit posts you wrote.</p>
+        <Link to={`/posts/${id}`} className="btn">
+          Back to the post
+        </Link>
+      </EmptyState>
+    );
+  }
+
   return (
     <section className="narrow">
       <h1>Edit post</h1>
       <PostEditor
         key={post.id}
-        initialValues={{ title: post.title, content: post.content, author: post.author }}
+        initialValues={{ title: post.title, content: post.content }}
         submitLabel="Save changes"
         onSubmit={handleUpdate}
         onCancel={() => navigate(`/posts/${id}`)}

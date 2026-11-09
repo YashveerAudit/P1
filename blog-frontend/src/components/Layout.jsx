@@ -1,9 +1,17 @@
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/auth-context';
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isSignedIn, signOut } = useAuth();
   // Pages pass a one-off success message via navigate(path, { state: { flash } }).
   const flash = location.state?.flash;
+
+  function handleSignOut() {
+    signOut();
+    navigate('/', { state: { flash: 'You have been logged out.' } });
+  }
 
   return (
     <div className="app">
@@ -16,9 +24,26 @@ export default function Layout() {
             <NavLink to="/" end>
               Posts
             </NavLink>
-            <NavLink to="/posts/new" className="btn btn--primary btn--small">
-              New post
-            </NavLink>
+            {isSignedIn ? (
+              <>
+                <NavLink to="/posts/new" className="btn btn--primary btn--small">
+                  New post
+                </NavLink>
+                <span className="navbar__user" title={user.email}>
+                  {user.name}
+                </span>
+                <button type="button" className="btn btn--small" onClick={handleSignOut}>
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <NavLink to="/login">Log in</NavLink>
+                <NavLink to="/register" className="btn btn--primary btn--small">
+                  Sign up
+                </NavLink>
+              </>
+            )}
           </nav>
         </div>
       </header>

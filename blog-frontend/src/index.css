@@ -139,6 +139,26 @@ a {
   color: var(--text);
 }
 
+.navbar__user {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Auth pages ---------- */
+.auth {
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.auth__footer {
+  text-align: center;
+  margin-top: 1.25rem;
+}
+
 /* ---------- Buttons ---------- */
 .btn {
   display: inline-flex;
@@ -432,6 +452,10 @@ a {
 @media (max-width: 480px) {
   .navbar__links {
     gap: 0.6rem;
+  }
+
+  .navbar__user {
+    display: none;
   }
 
   .actions .btn,
