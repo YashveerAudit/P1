@@ -10,10 +10,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import AsyncMongoClient
 
-from app.api.routes import posts
+from app.api.dependencies import USERS_COLLECTION
+from app.api.routes import auth, posts
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import add_request_logging, configure_logging
+from app.repositories.user_repository import MongoUserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     client = AsyncMongoClient(settings.mongo_uri, tz_aware=True)
     app.state.db = client[settings.mongo_db_name]
+    await MongoUserRepository.ensure_indexes(app.state.db[USERS_COLLECTION])
     logger.info("Connected to MongoDB database '%s'", settings.mongo_db_name)
     try:
         yield
@@ -39,7 +42,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         description="RESTful API for managing blog posts.",
-        version="1.0.0",
+        version="1.1.0",
         lifespan=lifespan,
     )
 
@@ -53,6 +56,7 @@ def create_app() -> FastAPI:
     add_request_logging(app)
     register_exception_handlers(app)
 
+    app.include_router(auth.router)
     app.include_router(posts.router)
 
     @app.get("/api/health", tags=["health"])

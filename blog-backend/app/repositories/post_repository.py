@@ -60,6 +60,7 @@ def _to_post(doc: Dict[str, Any]) -> Post:
         title=doc["title"],
         content=doc["content"],
         author=doc["author"],
+        owner_id=doc.get("owner_id"),
         created_at=created_at,
         updated_at=doc.get("updated_at") or created_at,
     )

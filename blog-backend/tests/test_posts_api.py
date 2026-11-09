@@ -1,11 +1,11 @@
-"""End-to-end tests of the HTTP API, using the in-memory repository."""
+"""End-to-end tests of the posts API, using in-memory repositories."""
 from app.api.dependencies import get_post_repository
 from app.main import app
 from tests.fakes import UnavailableDatabaseRepository
 
 
-def create(client, post):
-    response = client.post("/api/posts", json=post)
+def create(client, post, headers):
+    response = client.post("/api/posts", json=post, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -13,23 +13,37 @@ def create(client, post):
 # --- Create ------------------------------------------------------------------
 
 
-def test_create_post_returns_201_with_id_and_timestamps(client, valid_post):
-    body = create(client, valid_post)
+def test_create_post_returns_201_with_id_author_and_timestamps(client, valid_post, auth):
+    body = create(client, valid_post, auth["headers"])
 
     assert body["id"]
     assert body["title"] == valid_post["title"]
     assert body["content"] == valid_post["content"]
-    assert body["author"] == valid_post["author"]
+    assert body["author"] == auth["user"]["name"]
+    assert body["owner_id"] == auth["user"]["id"]
     assert body["created_at"] == body["updated_at"]
 
 
-def test_create_post_strips_surrounding_whitespace(client, valid_post):
-    body = create(client, {**valid_post, "title": "   Spaced title   "})
+def test_create_post_requires_sign_in(client, valid_post):
+    response = client.post("/api/posts", json=valid_post)
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "not_authenticated"
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_create_post_rejects_invalid_token(client, valid_post):
+    response = client.post("/api/posts", json=valid_post, headers={"Authorization": "Bearer not-a-real-token"})
+    assert response.status_code == 401
+
+
+def test_create_post_strips_surrounding_whitespace(client, valid_post, auth):
+    body = create(client, {**valid_post, "title": "   Spaced title   "}, auth["headers"])
     assert body["title"] == "Spaced title"
 
 
-def test_create_post_rejects_whitespace_only_title(client, valid_post):
-    response = client.post("/api/posts", json={**valid_post, "title": "     "})
+def test_create_post_rejects_whitespace_only_title(client, valid_post, auth):
+    response = client.post("/api/posts", json={**valid_post, "title": "     "}, headers=auth["headers"])
 
     assert response.status_code == 422
     error = response.json()["error"]
@@ -37,25 +51,26 @@ def test_create_post_rejects_whitespace_only_title(client, valid_post):
     assert error["details"][0]["field"] == "title"
 
 
-def test_create_post_rejects_missing_fields(client):
-    response = client.post("/api/posts", json={"title": "Only a title"})
+def test_create_post_rejects_missing_fields(client, auth):
+    response = client.post("/api/posts", json={"title": "Only a title"}, headers=auth["headers"])
 
     assert response.status_code == 422
     fields = {d["field"] for d in response.json()["error"]["details"]}
-    assert fields == {"content", "author"}
+    assert fields == {"content"}
 
 
-def test_create_post_rejects_client_supplied_id(client, valid_post):
-    response = client.post("/api/posts", json={**valid_post, "_id": "hacked"})
+def test_create_post_rejects_client_supplied_author_or_id(client, valid_post, auth):
+    for extra in ({"_id": "hacked"}, {"author": "Impostor"}, {"owner_id": "someone"}):
+        response = client.post("/api/posts", json={**valid_post, **extra}, headers=auth["headers"])
+        assert response.status_code == 422, extra
+
+
+def test_create_post_rejects_too_long_title(client, valid_post, auth):
+    response = client.post("/api/posts", json={**valid_post, "title": "x" * 151}, headers=auth["headers"])
     assert response.status_code == 422
 
 
-def test_create_post_rejects_too_long_title(client, valid_post):
-    response = client.post("/api/posts", json={**valid_post, "title": "x" * 151})
-    assert response.status_code == 422
-
-
-# --- Read --------------------------------------------------------------------
+# --- Read (public) -----------------------------------------------------------
 
 
 def test_list_posts_empty(client):
@@ -65,9 +80,9 @@ def test_list_posts_empty(client):
     assert response.json() == {"items": [], "total": 0, "skip": 0, "limit": 20}
 
 
-def test_list_posts_newest_first_with_pagination(client, valid_post):
+def test_list_posts_newest_first_with_pagination(client, valid_post, auth):
     for i in range(3):
-        create(client, {**valid_post, "title": f"Post number {i}"})
+        create(client, {**valid_post, "title": f"Post number {i}"}, auth["headers"])
 
     response = client.get("/api/posts", params={"skip": 1, "limit": 1})
 
@@ -81,8 +96,8 @@ def test_list_posts_rejects_limit_above_maximum(client):
     assert response.status_code == 422
 
 
-def test_get_post_by_id(client, valid_post):
-    created = create(client, valid_post)
+def test_get_post_by_id_without_signing_in(client, valid_post, auth):
+    created = create(client, valid_post, auth["headers"])
 
     response = client.get(f"/api/posts/{created['id']}")
 
@@ -100,44 +115,78 @@ def test_get_missing_post_returns_404(client):
 # --- Update ------------------------------------------------------------------
 
 
-def test_update_post_replaces_fields_and_bumps_updated_at(client, valid_post):
-    created = create(client, valid_post)
+def test_owner_can_update_post(client, valid_post, auth):
+    created = create(client, valid_post, auth["headers"])
     changes = {**valid_post, "title": "Edited title"}
 
-    response = client.put(f"/api/posts/{created['id']}", json=changes)
+    response = client.put(f"/api/posts/{created['id']}", json=changes, headers=auth["headers"])
 
     assert response.status_code == 200
     body = response.json()
     assert body["title"] == "Edited title"
+    assert body["author"] == auth["user"]["name"]
     assert body["created_at"] == created["created_at"]
     assert body["updated_at"] >= created["updated_at"]
 
 
-def test_update_missing_post_returns_404(client, valid_post):
-    response = client.put("/api/posts/does-not-exist", json=valid_post)
+def test_other_user_cannot_update_post(client, valid_post, auth, other_auth):
+    created = create(client, valid_post, auth["headers"])
+
+    response = client.put(f"/api/posts/{created['id']}", json=valid_post, headers=other_auth["headers"])
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "forbidden"
+    assert client.get(f"/api/posts/{created['id']}").json()["title"] == valid_post["title"]
+
+
+def test_update_requires_sign_in(client, valid_post, auth):
+    created = create(client, valid_post, auth["headers"])
+    response = client.put(f"/api/posts/{created['id']}", json=valid_post)
+    assert response.status_code == 401
+
+
+def test_update_missing_post_returns_404(client, valid_post, auth):
+    response = client.put("/api/posts/does-not-exist", json=valid_post, headers=auth["headers"])
     assert response.status_code == 404
 
 
-def test_update_with_invalid_data_returns_422(client, valid_post):
-    created = create(client, valid_post)
-    response = client.put(f"/api/posts/{created['id']}", json={**valid_post, "content": "short"})
+def test_update_with_invalid_data_returns_422(client, valid_post, auth):
+    created = create(client, valid_post, auth["headers"])
+    response = client.put(
+        f"/api/posts/{created['id']}", json={**valid_post, "content": "short"}, headers=auth["headers"]
+    )
     assert response.status_code == 422
 
 
 # --- Delete ------------------------------------------------------------------
 
 
-def test_delete_post_then_it_is_gone(client, valid_post):
-    created = create(client, valid_post)
+def test_owner_can_delete_post(client, valid_post, auth):
+    created = create(client, valid_post, auth["headers"])
 
-    response = client.delete(f"/api/posts/{created['id']}")
+    response = client.delete(f"/api/posts/{created['id']}", headers=auth["headers"])
 
     assert response.status_code == 204
     assert client.get(f"/api/posts/{created['id']}").status_code == 404
 
 
-def test_delete_missing_post_returns_404(client):
-    response = client.delete("/api/posts/does-not-exist")
+def test_other_user_cannot_delete_post(client, valid_post, auth, other_auth):
+    created = create(client, valid_post, auth["headers"])
+
+    response = client.delete(f"/api/posts/{created['id']}", headers=other_auth["headers"])
+
+    assert response.status_code == 403
+    assert client.get(f"/api/posts/{created['id']}").status_code == 200
+
+
+def test_delete_requires_sign_in(client, valid_post, auth):
+    created = create(client, valid_post, auth["headers"])
+    response = client.delete(f"/api/posts/{created['id']}")
+    assert response.status_code == 401
+
+
+def test_delete_missing_post_returns_404(client, auth):
+    response = client.delete("/api/posts/does-not-exist", headers=auth["headers"])
     assert response.status_code == 404
 
 

@@ -1,11 +1,13 @@
-"""Test doubles that stand in for the MongoDB repository."""
+"""Test doubles that stand in for the MongoDB repositories."""
 import uuid
 from typing import Any, Dict, List, Optional
 
 from pymongo.errors import ServerSelectionTimeoutError
 
 from app.models.post import Post
+from app.models.user import User
 from app.repositories.post_repository import PostRepository
+from app.repositories.user_repository import UserRepository
 
 
 class InMemoryPostRepository(PostRepository):
@@ -44,3 +46,19 @@ class UnavailableDatabaseRepository(InMemoryPostRepository):
 
     async def list(self, skip: int, limit: int) -> List[Post]:
         raise ServerSelectionTimeoutError("connection refused")
+
+
+class InMemoryUserRepository(UserRepository):
+    def __init__(self):
+        self._users: Dict[str, User] = {}
+
+    async def add(self, data: Dict[str, Any]) -> User:
+        user = User(id=uuid.uuid4().hex, **data)
+        self._users[user.id] = user
+        return user
+
+    async def get_by_email(self, email: str) -> Optional[User]:
+        return next((u for u in self._users.values() if u.email == email), None)
+
+    async def get_by_id(self, user_id: str) -> Optional[User]:
+        return self._users.get(user_id)
