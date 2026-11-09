@@ -1,0 +1,9 @@
+services:
+  backend:
+    build: ./blog-backend
+    container_name: blog-backend
+    env_file:
+      - ./blog-backend/.env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
