@@ -10,3 +10,5 @@ dist/
 # Local configuration files
 .env
 .DS_Store
+# Test / tool caches
+.pytest_cache/
