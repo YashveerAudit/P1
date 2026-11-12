@@ -2,16 +2,39 @@
 
 A full-stack blog post manager: a **FastAPI + MongoDB** REST API and a **React** single-page app for creating, reading, updating and deleting blog posts, with JWT authentication so only a post's author can edit or delete it.
 
+## Quick start (Docker – recommended)
+
+The only thing you need is [Docker Desktop](https://www.docker.com/products/docker-desktop/). No MongoDB account, Python or Node.js is required.
+
+```bash
+git clone https://github.com/YashveerAudit/P1.git
+cd P1
+docker compose up --build
+```
+
+Then open **http://localhost:8080**, create an account via **Sign up**, and start posting.
+
+This starts three containers: a local **MongoDB** database, the **FastAPI** backend and the **React** frontend (served by nginx, which also forwards `/api` requests to the backend). The first build takes a few minutes; later starts are fast.
+
+| URL | What |
+|---|---|
+| http://localhost:8080 | The app |
+| http://localhost:8000/docs | Interactive API docs |
+
+Stop with `Ctrl+C` (or `docker compose down`). Data is kept in a Docker volume between runs; `docker compose down -v` wipes it.
+
+> The Docker setup works with no configuration. It uses a built-in demo JWT secret, which is fine for a local review. To set your own, copy `.env.example` to `.env` in the project root and fill in `JWT_SECRET`.
+
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.11, FastAPI, Pydantic v2, PyMongo (async) |
 | Auth | JWT access tokens (PyJWT), Argon2 password hashing (pwdlib) |
-| Database | MongoDB Atlas |
+| Database | MongoDB (local container with Docker, or MongoDB Atlas) |
 | Frontend | React 19, React Router 7, Vite |
 | Testing | pytest, FastAPI TestClient |
-| DevOps | Docker, Docker Compose |
+| DevOps | Docker, Docker Compose, nginx |
 
 **Why Python/FastAPI?** FastAPI gives request validation, typed models and interactive OpenAPI docs out of the box, which keeps the code small and lets the focus stay on structure, error handling and tests.
 
@@ -23,7 +46,7 @@ A full-stack blog post manager: a **FastAPI + MongoDB** REST API and a **React**
 - Consistent JSON error format across the whole API
 - Structured request logging with a per-request ID (`X-Request-ID` header)
 - Responsive UI: post grid, detail view, create/edit form, delete confirmation, loading/empty/error states, dark mode
-- Containerised backend with a health check
+- Fully containerised: one `docker compose up` runs the database, API and frontend, with health checks
 
 ## Project structure
 
@@ -42,14 +65,16 @@ A full-stack blog post manager: a **FastAPI + MongoDB** REST API and a **React**
 │   ├── tests/                      # 43 API + service tests using in-memory repositories
 │   └── Dockerfile
 ├── blog-frontend/
-│   └── src/
-│       ├── api/                    # fetch wrapper (adds the token), typed API calls, token storage
-│       ├── context/                # AuthProvider + useAuth hook
-│       ├── components/             # Layout, PostCard, PostEditor, AuthForm, RequireAuth, ConfirmDialog…
-│       ├── hooks/useApi.js         # Data loading with loading/error/retry + request cancelling
-│       ├── pages/                  # Home, PostDetail, PostForm (create/edit), Login, Register, NotFound
-│       └── utils/                  # Validation rules, formatting
-└── docker-compose.yml
+│   ├── src/
+│   │   ├── api/                    # fetch wrapper (adds the token), typed API calls, token storage
+│   │   ├── context/                # AuthProvider + useAuth hook
+│   │   ├── components/             # Layout, PostCard, PostEditor, AuthForm, RequireAuth, ConfirmDialog…
+│   │   ├── hooks/useApi.js         # Data loading with loading/error/retry + request cancelling
+│   │   ├── pages/                  # Home, PostDetail, PostForm (create/edit), Login, Register, NotFound
+│   │   └── utils/                  # Validation rules, formatting
+│   ├── Dockerfile                  # Builds the app, serves it with nginx
+│   └── nginx.conf                  # Static files + /api proxy to the backend
+└── docker-compose.yml              # MongoDB + backend + frontend
 ```
 
 ### Design decisions
@@ -60,13 +85,12 @@ A full-stack blog post manager: a **FastAPI + MongoDB** REST API and a **React**
 - **Authorisation lives in the service layer** – `PostService` checks ownership before any update/delete, so the rule holds no matter which route calls it. The UI hides the buttons too, but the server is the source of truth.
 - **One error shape** – every error is returned as `{"error": {"code", "message", "details?"}}`, so the frontend handles errors in one place (including signing the user out automatically when a token expires).
 
-## Getting started
+## Running without Docker (for development)
 
 ### Prerequisites
 
-- Python 3.9+ and Node.js 20+
-- A MongoDB connection string (e.g. a free MongoDB Atlas cluster)
-- Docker (optional)
+- Python 3.9+ and Node.js 20.19+
+- A MongoDB connection string (e.g. a free MongoDB Atlas cluster, or a local MongoDB)
 
 ### 1. Configure environment variables
 
@@ -88,7 +112,7 @@ Generate a secret with `python -c "import secrets; print(secrets.token_urlsafe(4
 
 The frontend reads `VITE_API_URL` (default `http://127.0.0.1:8000`); see `blog-frontend/.env.example`.
 
-### 2a. Run the backend locally
+### 2. Run the backend
 
 ```bash
 cd blog-backend
@@ -99,12 +123,6 @@ uvicorn app.main:app --reload
 ```
 
 API: http://127.0.0.1:8000 · Interactive docs: http://127.0.0.1:8000/docs
-
-### 2b. …or run the backend with Docker
-
-```bash
-docker compose up --build
-```
 
 ### 3. Run the frontend
 
@@ -209,11 +227,12 @@ Frontend: `npm run lint` and `npm run build`.
 - **XSS-safe rendering** – post content is rendered as text by React, never as raw HTML.
 - **No internal details leaked** – unexpected and database errors return generic messages; full details go to server logs.
 - **Container runs as a non-root user**; secrets are passed at runtime, not baked into the image.
+- **Database not exposed** – in Docker, MongoDB is only reachable by the backend on the internal network; no port is published to the host.
 
 **Known trade-off:** the frontend stores the token in `localStorage` so a refresh keeps you signed in. This is safe only because the app never renders untrusted HTML; a production system would move to an `httpOnly` cookie with CSRF protection and add refresh tokens plus login rate-limiting.
 
 ## Roadmap
 
-- [ ] Frontend Dockerfile + full-stack `docker compose up`
+- [x] Frontend Dockerfile + full-stack `docker compose up`
 - [ ] Login rate-limiting and refresh tokens
 - [ ] Frontend component tests

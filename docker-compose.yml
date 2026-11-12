@@ -1,9 +1,49 @@
+# Full stack for local review: MongoDB + FastAPI backend + React frontend.
+#   docker compose up --build      then open http://localhost:8080
+#
+# Works with no configuration: it uses a local MongoDB container (not Atlas),
+# so no account, connection string or IP allow-listing is needed.
+# Optional overrides can go in a .env file next to this one (see .env.example).
+
 services:
+  mongo:
+    image: mongo:7
+    container_name: blog-mongo
+    volumes:
+      - mongo-data:/data/db # posts and users survive restarts
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
   backend:
     build: ./blog-backend
     container_name: blog-backend
-    env_file:
-      - ./blog-backend/.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-blog_database}
+      # Local-demo default only. Set JWT_SECRET in .env for anything beyond a local run.
+      JWT_SECRET: ${JWT_SECRET:-local-docker-demo-secret-change-me-0123456789}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
-      - "8000:8000"
+      - "8000:8000" # API + interactive docs at http://localhost:8000/docs
+    depends_on:
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
+
+  frontend:
+    build: ./blog-frontend
+    container_name: blog-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
