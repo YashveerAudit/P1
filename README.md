@@ -231,8 +231,3 @@ Frontend: `npm run lint` and `npm run build`.
 
 **Known trade-off:** the frontend stores the token in `localStorage` so a refresh keeps you signed in. This is safe only because the app never renders untrusted HTML; a production system would move to an `httpOnly` cookie with CSRF protection and add refresh tokens plus login rate-limiting.
 
-## Roadmap
-
-- [x] Frontend Dockerfile + full-stack `docker compose up`
-- [ ] Login rate-limiting and refresh tokens
-- [ ] Frontend component tests
